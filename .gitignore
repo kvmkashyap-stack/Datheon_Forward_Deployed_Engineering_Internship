@@ -1,0 +1,33 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Generated data
+data/
+*.pdf
+*.csv
+
+# Vector database files
+chroma_db/
+chroma.sqlite3
+*.parquet
+
+# Logs and benchmark outputs
+*.log
+benchmarks/results/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
