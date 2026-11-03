@@ -1,439 +1,893 @@
-TASK 4 — PRODUCTION AI SERVICE Datheon Forward Deployed Engineering
-Internship
-
-============================================================ 1. PROJECT
-OVERVIEW ============================================================
-
-Task_4_ProductionAIService is a container-oriented FastAPI microservice
-scaffold for exposing an AI text-generation endpoint with operational
-monitoring, health checks, request validation, and deployment
-configuration.
-
-The implementation focuses on production-service concerns: - A versioned
-FastAPI generation endpoint. - Liveness and readiness health
-endpoints. - Prometheus metrics for request counts, latency, errors, and
-token counts. - Environment-based configuration and secret handling. - A
-non-root Docker image definition. - Docker Compose configuration with
-restrictive runtime settings. - A small asynchronous benchmark utility
-that reports latency percentiles, throughput, and failures. - Automated
-tests for health, metrics, and generation behavior.
-
-IMPORTANT IMPLEMENTATION STATUS The current AI provider is a mock
-provider. The endpoint returns a simulated response; it does not call a
-real language model, and its token counts are zero. The benchmark
-numbers included below were measured against the local mock service, not
-a real model or a verified Docker deployment.
-
-Docker and Compose configuration files are present, and the Compose
-configuration was validated. The Docker engine was not available in the
-development environment, so the image was not built and the container
-was not launched or tested. Do not interpret the presence of Docker
-files as proof that the container has been successfully built or
-deployed.
-
-============================================================ 2. FEATURES
-============================================================
-
-API - FastAPI application. - POST /api/v1/generate for simulated text
-generation. - JSON request and response schemas. - Request validation
-through Pydantic. - Generic error handling intended to avoid exposing
-internal exception details.
-
-HEALTH CHECKS - GET /health/live — liveness check. - GET /health/ready —
-readiness check. - GET /health — general health endpoint. - GET / — root
-endpoint.
-
-OBSERVABILITY - GET /metrics — Prometheus-compatible metrics endpoint. -
-Request counters. - Request-latency histogram. - Error counters. - Input
-and output token counters. - Request middleware for timing and
-request/error instrumentation.
-
-CONFIGURATION AND SECURITY - Configuration is managed through Pydantic
-Settings and environment variables. - API key configuration uses
-SecretStr so secret values are not treated as ordinary display
-strings. - A .env.example file provides a template for environment
-configuration. - .env files should remain local and must not be
-committed. - Request middleware checks the declared Content-Length
-against the configured request-size limit. - Dockerfile defines a
-non-root runtime user. - Docker Compose includes restrictive options
-such as a read-only root filesystem, temporary writable storage, dropped
-Linux capabilities, no-new-privileges, and a localhost-only port
-binding.
-
-Limitations: the Content-Length check does not independently guarantee
-that every streamed or chunked request body is bounded. Production
-deployments should enforce request-size limits at the application and
-ingress/proxy layers. Security settings also need to be reviewed against
-the target deployment environment.
+# Task 4 — Production AI Service
+## Containerized FastAPI Microservice, Observability, Security, and Latency Benchmarking
 
-BENCHMARKING - Asynchronous HTTP requests. - Configurable request count
-and concurrency. - Successful and failed request counts. - Failure
-rate. - Total duration and throughput. - p50, p95, p99, and mean
-latency. - Timestamped JSON output under benchmarks/results/.
+**Internship:** Datheon — Forward Deployed Engineering Internship  
+**Task:** Task 4 — Client VPC Deployment, Dockerized Microservice and Latency Benchmark  
+**Project Directory:** `Task_4_ProductionAIService`  
+**Status:** Core implementation and automated tests completed; Docker runtime verification pending.
+
+---
+
+## 1. Project Overview
+
+Production AI Service is a containerization-ready AI microservice designed to demonstrate how an AI-powered API can be structured for deployment in a client-controlled environment.
+
+The service uses FastAPI to expose generation and health-check endpoints, Prometheus to collect operational metrics, environment-based configuration to manage secrets, and Docker Compose to define a hardened container deployment.
+
+The project focuses on reliability, observability, API validation, security-oriented container configuration, and performance measurement.
+
+The current implementation uses a mock AI provider so that the API, metrics, and benchmark workflow can be exercised without requiring a paid AI model or an external API key.
+
+### Key Features
+
+- **REST API:** FastAPI endpoints for AI generation and service health.
+- **Input validation:** Pydantic schemas for validating incoming requests and structuring responses.
+- **Service separation:** Independent configuration, middleware, metrics, schemas, and AI-service modules.
+- **Prometheus observability:** Request counts, latency distributions, error counts, and token counters.
+- **Security-oriented middleware:** Request-size checks, error handling, and request instrumentation.
+- **Container hardening:** Non-root container user, health checks, restricted capabilities, read-only root filesystem, and temporary writable storage configured in Docker files.
+- **Environment-based configuration:** Settings loaded from environment variables and `.env` during local development.
+- **Automated testing:** Pytest tests covering health, metrics, and AI endpoints.
+- **Latency benchmarking:** A configurable benchmark script that measures percentile latency, throughput, and failure rate.
+- **Deployment configuration:** Dockerfile, Docker Compose, and Prometheus configuration.
+
+---
+
+## 2. Problem Statement
+
+AI services deployed in client environments must be more than functional API endpoints. They need predictable interfaces, operational visibility, controlled configuration, repeatable deployment instructions, and measurable performance.
+
+A service that works locally may still fail in production because of missing health checks, insecure container privileges, unhandled errors, absent metrics, or poor latency under concurrent requests.
+
+This project addresses these engineering concerns by implementing a modular FastAPI service and providing supporting deployment, monitoring, testing, and benchmarking components.
+
+The implementation establishes the foundation for integrating a real AI inference provider and deploying the service inside a client-controlled network or VPC.
+
+---
+
+## 3. Objectives
+
+The primary objectives are:
+
+1. Build a modular FastAPI microservice for AI generation.
+2. Implement health and readiness endpoints for operational checks.
+3. Instrument API requests using Prometheus metrics.
+4. Measure request latency, throughput, and failure rate.
+5. Track input and output token counts through dedicated metrics.
+6. Load configuration and sensitive credentials through environment variables.
+7. Define a hardened Docker image and Docker Compose deployment.
+8. Add automated tests for core API behavior.
+9. Produce machine-readable benchmark results.
+10. Document the architecture, API contract, configuration, deployment process, and operational limitations.
+
+---
+
+## 4. Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| Python 3.12 | Application runtime |
+| FastAPI | REST API framework |
+| Uvicorn | ASGI application server |
+| Pydantic | Request and response validation |
+| Pydantic Settings | Environment-based configuration |
+| Prometheus Client | Metrics instrumentation and exposition |
+| Docker | Container image definition |
+| Docker Compose | Service deployment configuration |
+| Prometheus | Metrics scraping configuration |
+| Pytest | Automated testing |
+| HTTPX | HTTP client and API testing |
+| Python asyncio | Concurrent benchmark requests |
+| JSON | Benchmark result storage |
+
+---
+
+## 5. System Architecture
+
+### High-Level Architecture
+
+```text
+                   Client Application
+                          |
+                          | HTTP Request
+                          v
+                 FastAPI Application
+                          |
+                          v
+                Security and Metrics
+                     Middleware
+                          |
+                          v
+                    API Routing
+                          |
+                          v
+                  Request Validation
+                       Pydantic
+                          |
+                          v
+                    AI Service Layer
+                          |
+                          v
+                    Mock AI Provider
+                          |
+                          v
+                  Structured API Response
+```
+
+### Observability Architecture
+
+```text
+             Incoming API Requests
+                       |
+                       v
+              FastAPI Middleware
+                       |
+          +------------+------------+
+          |            |            |
+          v            v            v
+      Request      Latency       Error
+       Counts     Histogram      Counts
+          |            |            |
+          +------------+------------+
+                       |
+                       v
+               Prometheus Metrics
+                 /metrics endpoint
+                       |
+                       v
+                Prometheus Scraper
+          (configured for deployment)
+```
+
+### Deployment Architecture
+
+```text
+             Client / Internal Network
+                       |
+                       v
+              Host Port 8000
+                       |
+                       v
+              Docker Compose
+                       |
+                       v
+             Production AI Service
+              FastAPI + Uvicorn
+                       |
+            +----------+----------+
+            |                     |
+            v                     v
+       Health Checks         /metrics
+                                  |
+                                  v
+                              Prometheus
+                         (if deployed and configured)
+```
+
+The architecture separates API transport, request validation, business logic, configuration, and observability. This allows the AI provider to be replaced without redesigning the entire API.
+
+**Deployment status:** The Docker and Compose configuration files are implemented, and Compose configuration validation succeeded. Actual image building, container startup, and VPC deployment remain unverified because the local Docker Engine was unavailable.
+
+---
+
+## 6. Repository Structure
+
+```text
+Task_4_ProductionAIService/
+│
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── config.py
+│   ├── middleware.py
+│   ├── metrics.py
+│   ├── schemas.py
+│   │
+│   └── services/
+│       ├── __init__.py
+│       └── ai_service.py
+│
+├── tests/
+│   ├── test_health.py
+│   ├── test_metrics.py
+│   └── test_ai.py
+│
+├── benchmarks/
+│   ├── benchmark.py
+│   └── results/
+│       └── benchmark_20261103_153949.json
+│
+├── deployment/
+│   └── prometheus.yml
+│
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
+├── .env.example
+├── .gitignore
+├── requirements.txt
+└── README.md
+```
 
-TESTING - Automated tests cover health endpoints, metrics, and
-generation behavior. - The latest recorded test run passed 10 tests.
+### Module Responsibilities
 
-============================================================ 3. PROJECT
-STRUCTURE ============================================================
+**`app/main.py`**
 
-Task_4_ProductionAIService/ | |– app/ | |– init.py | |– main.py FastAPI
-application and routes | |– config.py Environment-backed application
-settings | |– middleware.py Request timing, size check, and error
-instrumentation | |– metrics.py Prometheus metric definitions | |–
-schemas.py Request and response models | | |
--- services/ |       |-- __init__.py |– ai_service.py Mock AI provider
-implementation | |– tests/ | |– test_health.py Health endpoint tests |
-|– test_metrics.py Metrics endpoint tests |
--- test_ai.py              Generation endpoint tests | |-- benchmarks/ |   |-- benchmark.py            HTTP benchmark runner |–
-results/ JSON benchmark reports | |– deployment/ |
--- prometheus.yml          Prometheus scrape configuration | |-- Dockerfile                  Container image definition |-- docker-compose.yml          Local service orchestration and runtime restrictions |-- .dockerignore               Files excluded from Docker build context |-- .env.example                Example environment configuration |-- .gitignore                  Git ignore rules |-- requirements.txt            Python dependencies–
-README.md Project documentation
+Creates the FastAPI application, registers middleware and API routes, and exposes the health, readiness, generation, and metrics endpoints.
 
-============================================================ 4.
-REQUIREMENTS
-============================================================
+**`app/config.py`**
 
--   Python 3.12 recommended.
--   pip.
--   Git, if cloning the repository.
--   Docker Engine with Docker Compose, if building and running the
-    container.
--   A compatible Windows PowerShell, macOS shell, or Linux shell.
+Defines application settings and loads configuration from environment variables. Sensitive configuration is represented using Pydantic's `SecretStr` where applicable.
 
-The service can be run directly with Python without Docker. Docker-based
-execution requires a functioning Docker Engine.
+**`app/middleware.py`**
 
-============================================================ 5. LOCAL
-SETUP — WINDOWS POWERSHELL
-============================================================
+Implements request-size checks, request instrumentation, error tracking, and generic handling of unhandled application exceptions.
 
-Open PowerShell in the Task_4_ProductionAIService directory.
+**`app/metrics.py`**
 
-Create a virtual environment:
+Defines Prometheus metrics used to monitor request volume, latency, failures, and token counts.
 
-    py -3.12 -m venv .venv
+**`app/schemas.py`**
 
-Activate it:
+Defines Pydantic request and response schemas for the generation API.
 
-    .\.venv\Scripts\Activate.ps1
+**`app/services/ai_service.py`**
 
-If PowerShell blocks script activation, use an approved local
-execution-policy approach or invoke the environment’s Python executable
-directly.
+Contains the AI service abstraction and current mock provider implementation.
 
-Install dependencies:
+**`tests/`**
 
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
+Contains automated tests for health endpoints, metrics exposure, and generation behavior.
 
-Create a local environment file from the example:
+**`benchmarks/benchmark.py`**
 
-    Copy-Item .env.example .env
+Executes concurrent HTTP requests and calculates performance statistics, including percentile latency, throughput, and failure rate.
 
-Open .env and review the settings. Keep real credentials out of source
-control. The current mock provider does not require a real model API key
-to produce its simulated response. Consult app/config.py and
-.env.example for the exact supported variable names and defaults; do not
-assume that an environment variable is supported unless it is declared
-there.
+**`benchmarks/results/`**
 
-Start the API:
+Stores timestamped JSON benchmark reports for reproducibility and comparison.
 
-    uvicorn app.main:app --host 127.0.0.1 --port 8001
+**`deployment/prometheus.yml`**
 
-Port 8001 is used in the example because port 8000 may already be
-occupied. If you choose another port, use that same port in the API and
-benchmark URLs.
+Provides the Prometheus scraping configuration.
 
-Open the interactive API documentation:
+**`Dockerfile`**
 
-    http://127.0.0.1:8001/docs
+Defines the application image, runtime setup, non-root user, and container health check.
 
-Alternative OpenAPI documentation:
+**`docker-compose.yml`**
 
-    http://127.0.0.1:8001/redoc
+Defines the service configuration, port binding, health-check behavior, and security-related container options.
 
-============================================================ 6. API
-ENDPOINTS ============================================================
+---
 
-GET /
+## 7. API Documentation
 
-Purpose: Returns the root endpoint response.
+The service exposes the following endpoints.
 
-GET /health
+### 7.1 Root Endpoint
 
-Purpose: Returns the general health response.
+**Method:** `GET`  
+**Path:** `/`
 
-GET /health/live
+Purpose:
+- Confirm that the API application responds.
+- Provide a basic service entry point.
 
-Purpose: Liveness endpoint for determining whether the application
-process is responding.
+Example:
 
-GET /health/ready
+```bash
+curl http://127.0.0.1:8001/
+```
 
-Purpose: Readiness endpoint intended for readiness checks. Review the
-current implementation before treating it as a dependency-aware
-readiness check; a mock provider does not establish the health of a real
-external model service.
+The example uses port `8001` because that was the port used during local verification.
 
-GET /metrics
+### 7.2 Liveness Endpoint
 
-Purpose: Exposes Prometheus-formatted metrics. The exact metric names
-are defined in app/metrics.py.
+**Method:** `GET`  
+**Path:** `/health/live`
 
-POST /api/v1/generate
+Purpose:
+- Check whether the application process is alive.
+- Support basic liveness monitoring.
 
-Purpose: Accepts a validated JSON request and returns a simulated
-generation response from the mock provider.
+Example:
 
-Example request: The exact request fields are defined in app/schemas.py.
-Use the Swagger UI at /docs or inspect that schema before relying on a
-specific payload shape.
+```bash
+curl http://127.0.0.1:8001/health/live
+```
 
-Example using curl: Replace the JSON body with the fields required by
-the current Generate request schema.
+### 7.3 Readiness Endpoint
 
-    curl -X POST "http://127.0.0.1:8001/api/v1/generate" ^
-      -H "Content-Type: application/json" ^
-      -d "{\"prompt\":\"Explain vector databases briefly.\"}"
+**Method:** `GET`  
+**Path:** `/health/ready`
 
-PowerShell note: The caret (^) is a cmd.exe line-continuation character,
-not a PowerShell continuation character. In PowerShell, use a
-single-line curl.exe command or Invoke-RestMethod. Example:
+Purpose:
+- Provide a readiness check for the service.
+- Support deployment health checks.
 
-    $body = @{ prompt = "Explain vector databases briefly." } | ConvertTo-Json
-    Invoke-RestMethod -Uri "http://127.0.0.1:8001/api/v1/generate" -Method Post -ContentType "application/json" -Body $body
+Example:
 
-The example payload above is illustrative. If the current schema
-requires additional fields or uses a different field name, follow
-app/schemas.py and /docs.
+```bash
+curl http://127.0.0.1:8001/health/ready
+```
 
-============================================================ 7.
-PROMETHEUS METRICS
-============================================================
+The current mock-provider architecture does not establish connectivity to a real external AI provider.
 
-The service exposes metrics at /metrics in Prometheus exposition format.
+### 7.4 Combined Health Endpoint
 
-The implementation tracks these categories: - Request count. - Request
-latency. - Error count. - Input token count. - Output token count.
+**Method:** `GET`  
+**Path:** `/health`
 
-Metric names, labels, histogram buckets, and units should be taken from
-app/metrics.py. Use those exact names when writing PromQL queries; do
-not guess metric identifiers.
+Purpose:
+- Provide a general health status for monitoring and operational inspection.
 
-The token counters currently receive zero values from the mock provider.
-They are instrumentation placeholders for a future real provider
-integration and should not be interpreted as actual model usage.
+Example:
 
-The deployment/prometheus.yml file is intended to configure Prometheus
-scraping. Confirm its target address and port against the runtime
-environment before starting Prometheus. A target configured for a
-container network may not work unchanged when Prometheus runs directly
-on the host, and vice versa.
+```bash
+curl http://127.0.0.1:8001/health
+```
 
-============================================================ 8.
-ENVIRONMENT VARIABLES AND SECRETS
-============================================================
+### 7.5 AI Generation Endpoint
 
-Application settings are loaded through Pydantic Settings. The exact
-setting names and defaults are defined in: - app/config.py -
-.env.example
+**Method:** `POST`  
+**Path:** `/api/v1/generate`  
+**Content-Type:** `application/json`
 
-Use .env.example as the authoritative template. Copy it to .env for
-local development and replace example values only when needed.
+Purpose:
+- Accept a generation request.
+- Validate the input.
+- Invoke the AI service layer.
+- Return a structured response.
 
-Security practices: - Never commit .env. - Never paste production API
-keys into README files, source code, benchmark reports, logs, or GitHub
-issues. - Use your deployment platform’s secret manager for real
-deployments. - Rotate any credential that has accidentally been
-committed or exposed. - Keep .env.example limited to placeholders and
-non-sensitive defaults. - Review logs to ensure request bodies, prompts,
-and secrets are not unintentionally recorded.
+Example request:
 
-The current provider is mock-only. Adding a real model provider requires
-implementing provider calls, handling timeouts and upstream errors,
-accurately recording token usage, and configuring credentials through a
-secure secret mechanism.
+```json
+{
+  "prompt": "Explain retrieval-augmented generation in simple terms."
+}
+```
 
-============================================================ 9. DOCKER
-AND DOCKER COMPOSE
-============================================================
+Example command:
 
-The repository includes: - Dockerfile - docker-compose.yml -
-.dockerignore - deployment/prometheus.yml
+```bash
+curl -X POST http://127.0.0.1:8001/api/v1/generate \
+  -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Explain retrieval-augmented generation in simple terms.\"}"
+```
 
-The Dockerfile is configured to run the service as a non-root user and
-includes a health check. Compose includes several container-hardening
-settings, including a read-only root filesystem, temporary writable
-storage, dropped capabilities, no-new-privileges, and a localhost-bound
-service port.
+The exact response fields and validation constraints are defined in `app/schemas.py`.
 
-When Docker Engine is available, validate and start the service from the
-Task_4_ProductionAIService directory:
+**Important:** The current provider is a mock implementation. The generated content is not produced by a real language model.
 
-    docker compose config
-    docker compose build
-    docker compose up -d
+### 7.6 Prometheus Metrics Endpoint
 
-Inspect status and logs:
+**Method:** `GET`  
+**Path:** `/metrics`
 
-    docker compose ps
-    docker compose logs --tail=100
+Purpose:
+- Expose instrumentation in Prometheus-compatible format.
+- Allow a configured Prometheus server to scrape application metrics.
 
-Check the health endpoint:
+Example:
 
-    curl http://127.0.0.1:8000/health
+```bash
+curl http://127.0.0.1:8001/metrics
+```
+
+The endpoint exposes metrics defined in `app/metrics.py`.
+
+---
+
+## 8. Observability and Metrics
+
+Operational visibility is essential when deploying an AI service inside a client environment.
+
+The application defines metrics for the following categories.
+
+### Request Count
+
+Tracks the volume of incoming requests.
+
+Use cases:
+- Monitor API traffic.
+- Compare request volume between deployments.
+- Identify sudden traffic changes.
+
+### Request Latency
+
+A Prometheus histogram records request latency.
+
+Use cases:
+- Observe response-time distributions.
+- Identify slow requests.
+- Support percentile-based performance analysis.
+
+### Error Count
+
+Tracks request failures according to the application's instrumentation.
+
+Use cases:
+- Detect application instability.
+- Identify changes in failure behavior.
+- Support incident investigation.
+
+### Input and Output Token Counts
+
+Dedicated counters are provided for input and output token usage.
+
+Use cases:
+- Prepare for usage monitoring after integrating a real language model.
+- Track token consumption when actual provider-reported token counts are available.
+- Support future cost and capacity analysis.
+
+**Current limitation:** The mock provider returns zero token counts. These counters therefore do not represent actual language-model consumption.
+
+### Prometheus Integration
+
+The `deployment/prometheus.yml` file defines the intended scraping configuration.
+
+A typical Prometheus deployment needs to:
+1. Start the Prometheus server.
+2. Load the scraping configuration.
+3. Reach the service's `/metrics` endpoint over the configured network.
+4. Verify that the target is healthy in Prometheus.
+
+Prometheus scraping has not been verified end-to-end in the current environment.
+
+---
+
+## 9. Security and Reliability
+
+The project incorporates several security-oriented design choices.
+
+### Environment-Based Configuration
+
+Configuration is loaded through environment variables and local environment files.
+
+The `.env.example` file provides a template for required settings without containing actual credentials.
+
+Actual `.env` files should not be committed to version control.
+
+### Request Validation
+
+Pydantic schemas validate incoming generation requests and structure API responses.
+
+Validation helps reject malformed requests before they reach the service layer.
+
+### Request-Size Checks
+
+The middleware checks the declared `Content-Length` header against the configured request-size limit.
+
+**Limitation:** This implementation does not independently guarantee size enforcement for streamed or chunked requests without a declared content length. Production deployment should enforce body limits at the application and reverse-proxy layers.
+
+### Error Handling
+
+The middleware tracks errors and provides generic handling for unhandled application exceptions.
+
+Internal exception details should not be exposed to clients.
+
+### Non-Root Container
+
+The Dockerfile configures the service to run as a non-root user, reducing the privileges available to the application inside the container.
+
+### Read-Only Root Filesystem
+
+The Compose configuration specifies a read-only container root filesystem, with temporary writable storage configured where needed.
+
+### Restricted Capabilities
+
+The Compose configuration drops Linux capabilities and enables `no-new-privileges`.
+
+These settings reduce the privileges available to the container process.
+
+### Local Port Binding
+
+The Compose configuration binds the service to `127.0.0.1:8000` on the host rather than exposing it to all host interfaces by default.
+
+This is appropriate for local testing. A client VPC deployment would require an explicitly designed network exposure strategy.
+
+### Health Checks
+
+Health checks are defined to support service monitoring and container lifecycle management.
+
+### Security Work Still Required for Production
+
+Before exposing the service to client traffic, the following should be addressed or verified:
+
+- Authentication and authorization.
+- TLS termination and certificate management.
+- Network policies and ingress restrictions.
+- Complete request-body size enforcement.
+- Rate limiting and abuse protection.
+- Secret injection through the client's approved secret-management system.
+- Dependency and container-image vulnerability scanning.
+- Centralized logging and retention policies.
+- Production AI-provider timeout and retry behavior.
+- End-to-end verification of health checks under failure conditions.
+
+The current implementation should be treated as a security-oriented deployment foundation, not as a completed security certification.
+
+---
+
+## 10. Environment Configuration
+
+The project includes `.env.example` as the template for local configuration.
+
+General workflow:
+
+1. Review `.env.example`.
+2. Create a local `.env` file if the application configuration requires it.
+3. Populate the required values locally.
+4. Never commit real credentials.
+5. Use the client's approved secret-management mechanism in production.
+
+The current AI provider defaults to mock mode, allowing development and benchmarking without a real model API key.
+
+No real external AI-provider integration is currently implemented.
+
+---
+
+## 11. Docker and Docker Compose
+
+### Dockerfile
+
+The Dockerfile defines the Python runtime, application dependencies, service startup, non-root execution, and health-check configuration.
+
+The intended container deployment provides a repeatable environment independent of the developer's local Python virtual environment.
+
+### Docker Compose
+
+The Compose file defines the service and its operational settings, including:
+
+- Application port mapping.
+- Environment configuration.
+- Health-check behavior.
+- Read-only root filesystem.
+- Temporary writable storage.
+- Dropped Linux capabilities.
+- No-new-privileges security option.
+
+### Configuration Validation
+
+Docker Compose configuration validation succeeded.
+
+However, the Docker Engine was unavailable in the development environment, so the following have **not** been verified:
+
+- Building the Docker image.
+- Starting the container.
+- Running the application inside the container.
+- Verifying the container health check at runtime.
+- Testing the complete Compose deployment.
+- Deploying to an actual client VPC.
+
+### Local Docker Verification
+
+After Docker Engine is available, run these commands from the `Task_4_ProductionAIService` directory.
+
+Validate the Compose configuration:
+
+```bash
+docker compose config
+```
+
+Build the image:
+
+```bash
+docker compose build
+```
+
+Start the service:
+
+```bash
+docker compose up -d
+```
+
+Inspect the running containers:
+
+```bash
+docker compose ps
+```
+
+Inspect application logs:
+
+```bash
+docker compose logs -f
+```
 
 Stop the service:
 
-    docker compose down
+```bash
+docker compose down
+```
 
-The port in the health-check command must match the published port in
-docker-compose.yml. Do not assume the Compose service uses port 8001;
-the local Python development run and the container mapping may differ.
+Run these commands only after Docker Engine is running and the Compose configuration has been reviewed for the target environment.
 
-Verification status: - Compose configuration validation succeeded during
-development. - Docker image build and container startup were not
-verified because Docker Engine was unavailable in the development
-environment. - The commands above are the next validation steps on a
-machine with Docker Engine running.
+---
 
-Before deploying to a client VPC: 1. Confirm the intended network
-binding and firewall rules. 2. Configure secrets through the approved
-secret manager. 3. Configure health-check behavior and restart policy.
-4. Set CPU, memory, and request limits appropriate to the workload. 5.
-Configure TLS at the approved ingress or reverse proxy. 6. Restrict
-access to /metrics if operational policy requires it. 7. Confirm
-Prometheus connectivity and scrape targets. 8. Test graceful shutdown,
-timeouts, and upstream failure behavior. 9. Verify that the container’s
-read-only filesystem and temporary storage meet application
-requirements. 10. Review the base image and dependencies for
-vulnerabilities and pin versions according to deployment policy.
+## 12. Automated Testing
 
-============================================================ 10. LATENCY
-AND THROUGHPUT BENCHMARK
-============================================================
+The project contains three test modules.
 
-The benchmark utility is located at:
+| Test File | Responsibility |
+|---|---|
+| `tests/test_health.py` | Health and readiness endpoint behavior |
+| `tests/test_metrics.py` | Metrics endpoint and instrumentation behavior |
+| `tests/test_ai.py` | AI generation endpoint behavior |
 
-    benchmarks/benchmark.py
+The test suite was executed successfully with **10 tests passing** in the local development environment.
 
-It sends concurrent HTTP requests to the running service and records
-request success/failure, latency percentiles, mean latency, total
-duration, and throughput. The JSON reports are saved under:
+Run the test suite with:
 
-    benchmarks/results/
+```bash
+pytest -v
+```
 
-A recorded local benchmark run used: - Target: http://127.0.0.1:8001 -
-Total requests: 100 - Concurrency: 10 - Successful requests: 100 -
-Failed requests: 0 - Failure rate: 0.0% - Duration: 0.647 seconds -
-Throughput: 154.47 requests/second - p50 latency: 42.41 ms - p95
-latency: 111.74 ms - p99 latency: 254.66 ms - Mean latency: 54.86 ms
+For coverage reporting:
 
-Interpretation: These figures describe one local run against the mock
-generation endpoint. They are not a production capacity claim and are
-not representative of a real LLM, network latency, a client VPC, or a
-Docker deployment. Results can vary with hardware, concurrent processes,
-warm-up, operating system, and network conditions. The p99 result is
-especially sensitive to occasional delays in a small sample.
+```bash
+pytest --cov=app --cov-report=term-missing
+```
 
-Run the benchmark with the options supported by the script:
+Automated tests help validate API behavior and reduce the risk of regressions when the service implementation changes.
 
-    python benchmarks/benchmark.py --help
+The successful test result applies to the local Python application; it does not establish that the application has passed tests inside Docker or in a production VPC.
 
-If the script does not implement –help, inspect its argument parser and
-use its documented defaults/options. Confirm that the target URL and
-request payload match the running service before interpreting the
-results.
+---
 
-For meaningful production benchmarking: - Run against the actual
-containerized deployment. - Use representative prompts and response
-sizes. - Include warm-up requests. - Test multiple concurrency levels
-and larger sample sizes. - Measure failures, timeouts, and latency
-distributions. - Record CPU and memory use alongside throughput. -
-Repeat runs and report the environment and test conditions. - Benchmark
-the real model provider separately from the mock provider. - Avoid
-publishing secrets or sensitive prompts in benchmark output.
+## 13. Performance Benchmarking
 
-============================================================ 11. TESTING
-============================================================
+The benchmark script in `benchmarks/benchmark.py` sends concurrent requests to the running service and calculates performance statistics.
 
-The test suite is in the tests/ directory.
+### Metrics Collected
 
-Run all tests:
+**Total requests:** Number of requests attempted.
 
-    python -m pytest -q
+**Successful requests:** Requests classified as successful by the benchmark.
 
-Run with coverage, if pytest-cov is installed:
+**Failed requests:** Requests that did not complete successfully according to the benchmark's criteria.
 
-    python -m pytest --cov=app --cov-report=term-missing
+**Failure rate:** Percentage of failed requests.
 
-Recorded result during development: 10 tests passed.
+**Latency percentiles:**
+- **p50:** Median observed request latency.
+- **p95:** Latency at the 95th percentile.
+- **p99:** Latency at the 99th percentile.
 
-The tests cover health endpoints, metrics exposure, and AI generation
-behavior. Passing tests validate the tested application behavior; they
-do not prove that the Docker image builds, that a production model
-provider works, or that the service is secure under every deployment
-configuration.
+**Mean latency:** Average observed request latency.
 
-============================================================ 12.
-TROUBLESHOOTING
-============================================================
+**Throughput:** Successful requests per second, as calculated by the benchmark.
 
-Port already in use: Start the local service on another port, for
-example 8001, and make sure the URL passed to the benchmark uses the
-same port.
+### Recorded Benchmark
 
-Docker cannot connect to the engine: Start and verify the Docker Engine
-or Docker Desktop backend appropriate to the operating system. Docker
-CLI being installed does not mean the engine is running. Re-run docker
-info before attempting a build.
+The following results were recorded during local testing against the mock-provider API on port `8001`.
 
-Environment variable is not recognized: Check app/config.py and
-.env.example for the exact variable name. Restart the service after
-changing environment settings.
+| Metric | Result |
+|---|---:|
+| Total requests | 100 |
+| Successful requests | 100 |
+| Failed requests | 0 |
+| Failure rate | 0.00% |
+| Concurrency | 10 |
+| Duration | 0.647 seconds |
+| Throughput | 154.47 requests/second |
+| p50 latency | 42.41 ms |
+| p95 latency | 111.74 ms |
+| p99 latency | 254.66 ms |
+| Mean latency | 54.86 ms |
 
-Metrics are missing or show zero tokens: Check /metrics and
-app/metrics.py. Zero token usage is expected from the current mock
-provider.
+**Benchmark report:** `benchmarks/results/benchmark_20261103_153949.json`
 
-Readiness succeeds while an external service is unavailable: The current
-mock provider has no real external model dependency. Revisit readiness
-behavior when a real provider is added.
+### Interpreting the Results
 
-Prometheus target is down: Check deployment/prometheus.yml, the target
-hostname/port, network reachability, and whether Prometheus is running
-on the host or in a container.
+The recorded run completed 100 benchmark requests without failures and achieved approximately 154.47 requests per second in that test environment.
 
-Request returns validation error: Inspect /docs and app/schemas.py to
-confirm the required request fields and data types.
+The p50 latency was 42.41 ms, while p95 latency was 111.74 ms and p99 latency was 254.66 ms.
 
-============================================================ 13. CURRENT
-LIMITATIONS AND NEXT STEPS
-============================================================
+The difference between median and tail latency indicates that some requests took longer than a typical request.
 
-Current limitations: - Mock AI provider only; no real LLM provider is
-integrated. - Mock token counts are zero. - Docker image build and
-container startup have not been verified in the development
-environment. - Benchmark results are from a local mock-service run, not
-a production deployment. - Request-size protection checks Content-Length
-and is not a complete streamed-body limit. - Prometheus metric names and
-configuration should be checked against the exact files before
-production use. - Client VPC networking, TLS, secret management, access
-control, and deployment-specific resource limits require
-environment-specific configuration and validation.
+These results describe one local benchmark run against the mock implementation. They are not a production performance guarantee and should not be compared directly with real-model latency.
 
-Recommended next steps: 1. Build and run the image with a working Docker
-Engine. 2. Run the automated tests against the containerized service. 3.
-Add a real provider behind the existing AI service interface. 4. Add
-upstream timeout, retry, and rate-limit policies where appropriate. 5.
-Record actual provider token usage and test error cases. 6. Add
-integration tests for provider failures and readiness behavior. 7.
-Verify Prometheus scraping from the intended deployment network. 8.
-Benchmark the container with representative traffic. 9. Complete the
-client integration guide with the actual request schema, response
-schema, authentication model, networking assumptions, and
-deployment-specific addresses. 10. Review the service against the
-client’s security and operational requirements before claiming
-production readiness.
+Actual AI inference performance will depend on the model, provider, network, prompt length, generated output length, concurrency, and infrastructure.
+
+### Running the Benchmark
+
+Start the service first, then execute:
+
+```bash
+python benchmarks/benchmark.py
+```
+
+Use the script's supported command-line options or configuration to adjust the target URL, request count, and concurrency where available.
+
+The benchmark generates a timestamped JSON report in `benchmarks/results/`.
+
+For reproducible comparisons, record the target environment, provider, request workload, concurrency, and date for each run.
+
+---
+
+## 14. Client Integration Guide
+
+This section describes how a client application can integrate with the API.
+
+### Step 1: Establish Network Access
+
+Ensure the client application can reach the service host and configured port.
+
+For local development, the service was tested on:
+
+```text
+http://127.0.0.1:8001
+```
+
+The Compose configuration uses host port `8000` by default.
+
+In a VPC, use the approved internal hostname or service address rather than assuming that localhost refers to the remote service.
+
+### Step 2: Check Service Health
+
+Call:
+
+```http
+GET /health
+```
+
+Use the result to determine whether the service is responding.
+
+For orchestrator-specific liveness and readiness behavior, use the corresponding dedicated endpoints.
+
+### Step 3: Send a Generation Request
+
+Call:
+
+```http
+POST /api/v1/generate
+Content-Type: application/json
+```
+
+Provide a JSON body that conforms to the request schema defined in `app/schemas.py`.
+
+Example request:
+
+```json
+{
+  "prompt": "Summarize the following text in three sentences."
+}
+```
+
+### Step 4: Handle Errors
+
+Client applications should handle HTTP errors, network timeouts, invalid responses, and service unavailability.
+
+Production clients should use bounded timeouts and retry only where appropriate. Retry policies should avoid duplicating non-idempotent operations.
+
+### Step 5: Monitor the Service
+
+Use the `/metrics` endpoint to expose application instrumentation to an approved Prometheus deployment.
+
+Monitor request volume, latency, failures, and token counts once actual model usage is integrated.
+
+### Step 6: Configure Production Networking
+
+Before production use, configure the required ingress, TLS, authentication, authorization, and network policies according to the client's security requirements.
+
+**Integration limitation:** The documented generation workflow currently uses a mock provider. A real AI provider must be integrated before this service can be used for actual model inference.
+
+---
+
+## 15. Failure Handling and Operational Considerations
+
+Production-oriented API services should be designed around expected failure modes.
+
+### Invalid Input
+
+Request schemas validate incoming data and allow malformed inputs to be rejected before application processing.
+
+### Application Exceptions
+
+The middleware tracks errors and handles unhandled application exceptions with a generic response.
+
+### Provider Failure
+
+A real provider has not yet been integrated. Provider-specific failures, timeouts, throttling, retries, and fallback behavior therefore remain future implementation work.
+
+### Container Failure
+
+The Docker and Compose files define health-check and runtime security configuration. Runtime recovery behavior must be verified after the container has been started successfully.
+
+### Monitoring Failure
+
+The application exposes metrics, but a working Prometheus server must be deployed and configured to scrape the endpoint before end-to-end monitoring can be confirmed.
+
+### Performance Degradation
+
+Latency percentiles and throughput measurements provide a baseline for detecting performance changes. Real-provider benchmarks should be conducted before setting production service-level objectives.
+
+---
+
+## 16. Engineering Decisions
+
+### Why FastAPI?
+
+FastAPI provides a clear HTTP interface, request validation, typed schemas, and an ASGI-based runtime suitable for Python microservices.
+
+### Why a Separate Service Layer?
+
+Keeping generation logic outside the routing module makes the API easier to maintain and allows the mock provider to be replaced with a real inference provider.
+
+### Why Prometheus?
+
+Prometheus-compatible metrics support request monitoring, latency analysis, error tracking, and integration with standard observability systems.
+
+### Why Docker?
+
+Containerization provides a repeatable application environment and simplifies deployment into controlled infrastructure.
+
+### Why Docker Compose?
+
+Compose provides a readable, version-controlled definition of service configuration and container runtime security settings.
+
+### Why a Mock AI Provider?
+
+The mock provider enables local API development, automated testing, and performance measurement without depending on external credentials or paid inference services.
+
+It also isolates API overhead from model inference latency. The resulting benchmark must not be interpreted as real-model performance.
+
+### Why Percentile Latency?
+
+Mean latency alone can hide slow requests. p50, p95, and p99 provide a more informative view of typical and tail response times.
+
+---
+
+## 17. Current Limitations and Future Improvements
+
+The following work would strengthen the service before production deployment.
+
+1. **Real AI provider integration:** Add a configurable model provider and secure credential handling.
+2. **Provider token accounting:** Record actual provider-reported input and output token usage.
+3. **Provider timeout handling:** Introduce bounded timeouts and appropriate retry policies.
+4. **Authentication and authorization:** Protect generation and operational endpoints according to client requirements.
+5. **Complete body-size enforcement:** Enforce request limits for both declared and streamed request bodies.
+6. **Production logging:** Add structured logs, request correlation IDs, and a documented retention strategy.
+7. **Container runtime verification:** Build the image, start the container, and test health checks.
+8. **Prometheus verification:** Run Prometheus and confirm successful metric scraping.
+9. **Realistic benchmarks:** Benchmark with a real provider and representative prompt and response sizes.
+10. **Load and stress testing:** Increase concurrency and request volume while measuring errors and resource utilization.
+11. **Deployment automation:** Add a repeatable deployment workflow for the intended client environment.
+12. **VPC validation:** Verify network access, secrets, DNS, TLS, and observability in the target client infrastructure.
+13. **Dependency security:** Scan dependencies and container images for known vulnerabilities.
+14. **Operational documentation:** Establish deployment, rollback, troubleshooting, and incident-response procedures.
+
+---
+
+## 18. Reproducibility
+
+The project includes the code, test modules, dependency manifest, deployment configuration, benchmark script, and recorded benchmark output required to inspect the current implementation.
+
+To reproduce local testing:
+
+1. Create and activate a Python 3.12 virtual environment.
+2. Install dependencies from `requirements.txt`.
+3. Configure environment variables as needed.
+4. Start the FastAPI application using the project's configured startup command.
+5. Run `pytest -v`.
+6. Execute the benchmark script against the running service.
+7. Inspect the resulting JSON report.
+
+Docker-based reproduction requires a working Docker Engine and successful container startup.
+
+---
+
+## 19. Conclusion
+
+Task 4 implements a modular, containerization-ready FastAPI service with health endpoints, Prometheus instrumentation, environment-based configuration, security-oriented Docker settings, automated tests, and a repeatable latency benchmark.
+
+The local test suite passed 10 tests, and the recorded mock-provider benchmark completed 100 requests with a 0% failure rate and measured throughput of 154.47 requests per second.
+
+The work establishes a foundation for integrating a real AI provider and deploying the service into a client-controlled environment. Actual Docker runtime validation, end-to-end Prometheus scraping, real-model performance testing, and client VPC deployment remain outstanding verification steps.
+
+---
+
+**Project:** `Task_4_ProductionAIService`  
+**Repository:** `Datheon_Forward_Deployed_Engineering_Internship`  
+**Primary focus:** Production-oriented API engineering, observability, container hardening, and performance measurement.
