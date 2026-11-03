@@ -1,0 +1,16 @@
+{
+  "target_url": "http://127.0.0.1:8001",
+  "total_requests": 100,
+  "successful_requests": 100,
+  "failed_requests": 0,
+  "failure_rate_percent": 0.0,
+  "concurrency": 10,
+  "duration_seconds": 0.647,
+  "throughput_requests_per_second": 154.47,
+  "latency_ms": {
+    "p50": 42.41,
+    "p95": 111.74,
+    "p99": 254.66,
+    "mean": 54.86
+  }
+}
